@@ -1,72 +1,98 @@
 # 我的日历 — GitHub 云同步版
 
+> 线上地址：**[https://by237.top](https://by237.top)**
+
+---
+
 ## 工作原理
 
 ```
 手机/电脑浏览器
       ↓
-GitHub Pages（托管网页）
+by237.top（GitHub Pages + 自定义域名）
       ↓
 GitHub API（读写数据）
       ↓
-你的私有仓库（存数据）
+私有仓库 calendar-data（存 JSON 数据）
 ```
+
+- **网页托管**：GitHub Pages + 阿里云 `.top` 自定义域名（绕过 GFW 封锁）
+- **数据存储**：GitHub 私有仓库，通过 GitHub API 读写 JSON 文件
+- **费用**：¥1/年（域名续费）
 
 ---
 
-## 首次设置步骤
+## 功能
+
+- 📅 月历视图，可切换月份，键盘 `←` `→` 翻页
+- ✅ 列表式事项管理：逐条添加、完成、删除
+- 🔵 日历格子小圆点标记（黄=待办，绿=已完成）
+- 💾 自动保存到云端（编辑后 0.6 秒自动保存）
+- 📥📤 数据导出/导入（JSON 文件，支持合并或覆盖）
+- 🔄 强制同步按钮（多设备同时打开时刷新数据）
+- 🔐 GitHub Token 登录，勾选"记住"后自动登录
+
+---
+
+## 首次设置
 
 ### 第 1 步：创建 GitHub Personal Access Token
 
 1. 打开 https://github.com/settings/tokens/new
-2. 在 "Note" 填写：`日历应用`
-3. 在 "Expiration" 选择：`No expiration`（永不过期）
-4. 勾选 **repo** 权限（勾这一个就够了）
-5. 点击底部的 **Generate token**
-6. **复制生成的 token**（格式是 `ghp_xxxxxxxxxxxx`），保存好，只显示一次
+2. Note：`日历应用`
+3. Expiration：`No expiration`（永不过期）
+4. 勾选 **repo** 权限
+5. 点击 **Generate token**，复制生成的 Token
+6. 在 [https://by237.top](https://by237.top) 登录页输入
 
-### 第 2 步：创建私有数据仓库
+### 第 2 步：登录并勾选"记住"
 
-1. 打开 https://github.com/new
-2. Repository name: `calendar-data`
-3. 选择 **Private**（私有）
-4. 勾选 "Add a README file"
-5. 点击 **Create repository**
-
-### 第 3 步：启用 GitHub Pages
-
-> 仓库 `zmd-10086/calendar` 已创建并推送代码后：
-
-1. 打开 https://github.com/zmd-10086/calendar/settings/pages
-2. Source 选择 **Deploy from a branch**
-3. Branch 选择 **main**，目录选 **/ (root)**
-4. 点击 **Save**
-5. 等待 1-2 分钟，页面会显示网址：`https://zmd-10086.github.io/calendar/`
-
-### 第 4 步：打开网站
-
-1. 浏览器访问：`https://zmd-10086.github.io/calendar/`
+1. 打开 https://by237.top
 2. 输入：
    - GitHub 用户名：`zmd-10086`
    - 数据仓库名：`calendar-data`
-   - Personal Access Token：第 1 步生成的 token
-3. 勾选"记住用户名和仓库名"
+   - Token：上一步生成的
+3. ✅ 勾选 **"记住所有信息"**
 4. 点击"进入日历"
+
+**之后每次打开网站自动登录，不用再填。**
 
 ---
 
 ## 跨设备使用
 
-- 每台设备都访问同一个网址
-- 第一次打开时输入同样的 Token
-- 数据自动跨设备同步
+- 每台设备都访问 `https://by237.top`
+- 首次输入 Token 后勾选"记住"
+- 编辑内容自动保存到云端，其他设备刷新即可看到
 
 ---
 
-## 从旧的单机版迁移数据
+## 使用方式
 
-1. 用浏览器打开旧的 `index.html`（桌面上的 rili 文件夹）
-2. 点击 **📥 导出备份**，得到一个 JSON 文件
-3. 在新网站上点击 **📤 导入备份**
-4. 选择刚才的 JSON 文件，选择"覆盖"模式
-5. 数据就全部迁移过来了
+### 添加事项
+在底部输入框输入内容 → 点击"添加"（或按回车）
+
+### 标记完成
+点击事项右侧的 **"✓ 完成"** → 事项移到已完成分组
+
+### 删除事项
+点击事项右侧的 **"删除"**
+
+### 清空当天
+点击底部的 **"清空当天"** 按钮
+
+### 键盘快捷键
+| 按键 | 功能 |
+|------|------|
+| `←` `→` | 切换月份 |
+| `T` | 回到今天 |
+
+---
+
+## 从旧版迁移数据
+
+1. 打开桌面 `rili` 文件夹里的旧版 `index.html`
+2. 点击 **📥 导出备份**，得到 JSON 文件
+3. 在 [https://by237.top](https://by237.top) 点击 **📤 导入备份**
+4. 选择文件，选择"覆盖"模式
+5. 旧数据自动转换为新的列表格式
