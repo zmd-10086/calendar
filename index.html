@@ -219,7 +219,10 @@ body{
     <button class="btn btn-primary" id="loginBtn">进入日历</button>
     <div class="remember-row">
       <input type="checkbox" id="rememberInfo">
-      <label for="rememberInfo">记住用户名和仓库名（Token 不会保存）</label>
+      <label for="rememberInfo">记住所有信息（含Token，下次自动登录）</label>
+    </div>
+    <div class="remember-row" style="font-size:0.7rem;color:#999;margin-top:2px">
+      ⚠️ 仅在你自己的设备上勾选，别人用你的电脑也能访问日历
     </div>
   </div>
 </div>
@@ -308,23 +311,34 @@ const importModal = $('importModal');
 // AUTH / CONFIG
 // ═══════════════════════════════════════════
 function getCfg() {
-  return {
-    user:  sessionStorage.getItem('cal_gh_user')  || '',
-    repo:  sessionStorage.getItem('cal_gh_repo')  || '',
-    token: sessionStorage.getItem('cal_gh_token') || ''
-  };
+  // sessionStorage first (temporary session), fallback to localStorage (remembered)
+  var u  = sessionStorage.getItem('cal_gh_user')  || localStorage.getItem('cal_ls_user')  || '';
+  var r  = sessionStorage.getItem('cal_gh_repo')  || localStorage.getItem('cal_ls_repo')  || '';
+  var t  = sessionStorage.getItem('cal_gh_token') || localStorage.getItem('cal_ls_token') || '';
+  if (u) sessionStorage.setItem('cal_gh_user',  u);
+  if (r) sessionStorage.setItem('cal_gh_repo',  r);
+  if (t) sessionStorage.setItem('cal_gh_token', t);
+  return { user: u, repo: r, token: t };
 }
 
-function setCfg(user, repo, token) {
+function setCfg(user, repo, token, remember) {
   sessionStorage.setItem('cal_gh_user',  user);
   sessionStorage.setItem('cal_gh_repo',  repo);
   sessionStorage.setItem('cal_gh_token', token);
+  if (remember) {
+    localStorage.setItem('cal_ls_user',  user);
+    localStorage.setItem('cal_ls_repo',  repo);
+    localStorage.setItem('cal_ls_token', token);
+  }
 }
 
 function clearCfg() {
   sessionStorage.removeItem('cal_gh_user');
   sessionStorage.removeItem('cal_gh_repo');
   sessionStorage.removeItem('cal_gh_token');
+  localStorage.removeItem('cal_ls_user');
+  localStorage.removeItem('cal_ls_repo');
+  localStorage.removeItem('cal_ls_token');
 }
 
 function showLogin(errMsg) {
@@ -333,17 +347,24 @@ function showLogin(errMsg) {
   syncBar.style.display = 'none';
 
   // Restore saved fields
-  var savedUser = localStorage.getItem('cal_saved_user');
-  var savedRepo = localStorage.getItem('cal_saved_repo');
-  if (savedUser) ghUserInput.value = savedUser;
-  if (savedRepo) ghRepoInput.value = savedRepo;
-  rememberCb.checked = !!(savedUser || savedRepo);
+  var savedUser  = localStorage.getItem('cal_ls_user');
+  var savedRepo  = localStorage.getItem('cal_ls_repo');
+  var savedToken = localStorage.getItem('cal_ls_token');
+  if (savedUser)  ghUserInput.value  = savedUser;
+  if (savedRepo)  ghRepoInput.value  = savedRepo;
+  if (savedToken) ghTokenInput.value = savedToken;
+  rememberCb.checked = !!(savedUser || savedRepo || savedToken);
 
   if (errMsg) {
     loginErr.textContent = errMsg;
     loginErr.style.display = 'block';
   } else {
     loginErr.style.display = 'none';
+  }
+  // Auto-login if everything is saved
+  if (savedUser && savedRepo && savedToken && !errMsg) {
+    doLogin();
+    return;
   }
   setTimeout(function(){ ghTokenInput.focus(); }, 100);
 }
@@ -397,17 +418,8 @@ async function doLogin() {
     return;
   }
 
-  // Save config
-  setCfg(user, repo, token);
-
-  // Remember user & repo (never token)
-  if (rememberCb.checked) {
-    localStorage.setItem('cal_saved_user', user);
-    localStorage.setItem('cal_saved_repo', repo);
-  } else {
-    localStorage.removeItem('cal_saved_user');
-    localStorage.removeItem('cal_saved_repo');
-  }
+  // Save config (including token if "remember" is checked)
+  setCfg(user, repo, token, rememberCb.checked);
 
   hideLogin();
   await loadData();
