@@ -476,8 +476,8 @@ async function loadData() {
     var json = await res.json();
     fileSha = json.sha;
     var content = json.content || '';
-    // Decode base64
-    var raw = atob(content.replace(/\s/g, ''));
+    // Decode base64 (reverse the btoa+unescape+encodeURIComponent used when saving)
+    var raw = decodeURIComponent(escape(atob(content.replace(/\s/g, ''))));
     var data = JSON.parse(raw);
     // Save local backup
     localStorage.setItem(LOCAL_KEY, raw);
