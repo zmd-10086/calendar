@@ -139,6 +139,35 @@ body{
 .ed-sec textarea.ta-done:focus{border-color:var(--done);box-shadow:0 0 0 3px rgba(16,185,129,0.12)}
 .ed-sec textarea::placeholder{color:#c0c7cf}
 
+/* ── Task List ── */
+.task-list{display:flex;flex-direction:column;gap:6px}
+.task-item{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 12px;border-radius:var(--radius-sm);
+  background:#fafbfc;border:1px solid var(--border);transition:var(--trans);
+}
+.task-item .task-text{flex:1;font-size:0.93rem;word-break:break-word}
+.task-item.done .task-text{text-decoration:line-through;color:#9ca3af}
+.task-item .task-badge{font-size:0.7rem;padding:3px 8px;border-radius:10px;font-weight:600;white-space:nowrap}
+.task-item .task-badge.badge-done{background:#d1fae5;color:#059669}
+.task-item .task-badge.badge-pending{background:#fef3c7;color:#d97706}
+.task-item .task-btn{
+  background:none;border:none;cursor:pointer;font-size:0.78rem;
+  padding:4px 8px;border-radius:6px;transition:var(--trans);white-space:nowrap;
+}
+.task-item .task-btn.btn-complete{color:var(--done)}
+.task-item .task-btn.btn-complete:hover{background:#d1fae5}
+.task-item .task-btn.btn-delete{color:#9ca3af}
+.task-item .task-btn.btn-delete:hover{background:#fee2e2;color:var(--danger)}
+.task-add-row{display:flex;gap:8px;margin-top:4px}
+.task-add-row input{
+  flex:1;padding:10px 14px;font-size:0.93rem;border:1px solid var(--border);
+  border-radius:var(--radius-sm);font-family:inherit;transition:var(--trans);
+  background:#fafbfc;color:var(--text);
+}
+.task-add-row input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,110,247,0.12);background:#fff}
+.task-add-row .btn{white-space:nowrap}
+
 /* ── Buttons ── */
 .btns{display:flex;gap:10px;justify-content:flex-end}
 .btn{
@@ -577,7 +606,16 @@ function key(y, m, d) {
   return y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
 }
 function getDay(dk) {
-  return data[dk] || { todo: '', done: '' };
+  var dd = data[dk] || { items: [] };
+  // Migrate old {todo, done} format to new {items} format
+  if (!Array.isArray(dd.items)) {
+    dd.items = [];
+    if (((dd.todo) || '').trim()) dd.items.push({ text: dd.todo.trim(), done: false });
+    if (((dd.done) || '').trim()) dd.items.push({ text: dd.done.trim(), done: true });
+    delete dd.todo;
+    delete dd.done;
+  }
+  return dd;
 }
 
 function toast(msg) {
@@ -623,12 +661,12 @@ function renderCal() {
   function cell(d, cls, dkey) {
     var dd = getDay(dkey);
     var dots = '';
-    var t = (dd.todo || '').trim();
-    var dn = (dd.done || '').trim();
-    if (t || dn) {
+    var hasPend = dd.items.some(function(it){ return !it.done; });
+    var hasDone = dd.items.some(function(it){ return it.done; });
+    if (hasPend || hasDone) {
       dots = '<div class="dots">';
-      if (t) dots += '<span class="dot td"></span>';
-      if (dn) dots += '<span class="dot dn"></span>';
+      if (hasPend) dots += '<span class="dot td"></span>';
+      if (hasDone) dots += '<span class="dot dn"></span>';
       dots += '</div>';
     }
     return '<div class="day' + (cls ? ' ' + cls : '') + '" data-k="' + dkey + '"><span>' + d + '</span>' + dots + '</div>';
@@ -697,42 +735,96 @@ function showEditor(dk) {
     '<div class="ed-title">📆 ' + y + '年' + m + '月' + d + '日 ' + wds[wd] + '</div>' +
     '<div class="ed-sec">' +
       '<label><span class="badge bt"></span> 待办事项</label>' +
-      '<textarea class="ta-todo" id="taTodo" placeholder="写下今天要做的事情…">' + esc(dd.todo) + '</textarea>' +
+      '<div class="task-list" id="pendingList"></div>' +
     '</div>' +
-    '<div class="ed-sec">' +
+    '<div class="ed-sec" id="doneSec" style="display:none">' +
       '<label><span class="badge bd"></span> 已完成事项</label>' +
-      '<textarea class="ta-done" id="taDone" placeholder="写下已经完成的事情…">' + esc(dd.done) + '</textarea>' +
+      '<div class="task-list" id="doneList"></div>' +
+    '</div>' +
+    '<div class="task-add-row">' +
+      '<input type="text" id="taskInput" placeholder="添加新事项…">' +
+      '<button class="btn btn-primary" id="btnAdd">添加</button>' +
     '</div>' +
     '<div class="btns">' +
       '<button class="btn btn-danger" id="btnClear">清空当天</button>' +
     '</div>';
 
-  var taTodo = $('taTodo');
-  var taDone = $('taDone');
+  // ── Render items ──
+  function renderItems() {
+    var dd = getDay(selDate);
+    var pendingHTML = '';
+    var doneHTML = '';
+    for (var i = 0; i < dd.items.length; i++) {
+      var item = dd.items[i];
+      var row =
+        '<div class="task-item' + (item.done ? ' done' : '') + '" data-idx="' + i + '">' +
+          '<span class="task-text">' + esc(item.text) + '</span>' +
+          (item.done
+            ? '<span class="task-badge badge-done">已完成</span>' +
+              '<button class="task-btn btn-delete" data-idx="' + i + '">删除</button>'
+            : '<button class="task-btn btn-complete" data-idx="' + i + '">✓ 完成</button>' +
+              '<button class="task-btn btn-delete" data-idx="' + i + '">删除</button>'
+          ) +
+        '</div>';
+      if (item.done) { doneHTML += row; }
+      else { pendingHTML += row; }
+    }
+    $('pendingList').innerHTML = pendingHTML || '<div style="font-size:0.85rem;color:#9ca3af;padding:12px;text-align:center">暂无待办事项</div>';
+    $('doneList').innerHTML = doneHTML;
+    $('doneSec').style.display = doneHTML ? 'flex' : 'none';
 
-  function autoSave() {
-    if (!data[selDate]) data[selDate] = { todo: '', done: '' };
-    data[selDate].todo = taTodo.value;
-    data[selDate].done = taDone.value;
-    renderCal();
-    debouncedSave();
+    // ── Bind buttons ──
+    document.querySelectorAll('.task-btn.btn-complete').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var idx = parseInt(this.getAttribute('data-idx'));
+        dd.items[idx].done = true;
+        persistAndReRender();
+      });
+    });
+    document.querySelectorAll('.task-btn.btn-delete').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var idx = parseInt(this.getAttribute('data-idx'));
+        dd.items.splice(idx, 1);
+        persistAndReRender();
+      });
+    });
   }
 
-  taTodo.addEventListener('input', autoSave);
-  taDone.addEventListener('input', autoSave);
+  function persistAndReRender() {
+    renderCal();
+    debouncedSave();
+    renderItems();
+  }
 
+  renderItems();
+
+  // ── Add new item ──
+  function addItem() {
+    var input = $('taskInput');
+    var text = input.value.trim();
+    if (!text) return;
+    if (!data[selDate]) data[selDate] = { items: [] };
+    data[selDate].items.unshift({ text: text, done: false });
+    input.value = '';
+    persistAndReRender();
+  }
+  $('btnAdd').addEventListener('click', addItem);
+  $('taskInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') addItem();
+  });
+
+  // ── Clear all ──
   $('btnClear').addEventListener('click', function() {
     if (confirm('确定要清空 ' + y + '年' + m + '月' + d + '日 的所有内容吗？')) {
       delete data[selDate];
-      taTodo.value = '';
-      taDone.value = '';
       renderCal();
       debouncedSave();
+      renderItems();
       toast('✓ 已清空');
     }
   });
 
-  setTimeout(function() { taTodo.focus(); }, 60);
+  setTimeout(function() { $('taskInput').focus(); }, 80);
 }
 
 // ═══════════════════════════════════════════
