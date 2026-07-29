@@ -175,6 +175,49 @@ body{
 .task-add-row input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,110,247,0.12);background:#fff}
 .task-add-row .btn{white-space:nowrap}
 
+/* ── Stats Row ── */
+.stats-row{
+  display:flex;gap:10px;justify-content:center;padding-top:10px;
+  border-top:1px solid var(--border);margin-top:10px;flex-wrap:wrap;
+}
+.stats-item{
+  text-align:center;padding:8px 16px;border-radius:var(--radius-sm);
+  background:#fafbfc;border:1px solid var(--border);min-width:70px;cursor:pointer;
+  transition:var(--trans);
+}
+.stats-item:hover{background:var(--primary-light);border-color:var(--primary)}
+.stats-item .stats-num{font-size:1.4rem;font-weight:700;color:var(--primary)}
+.stats-item.done-stat .stats-num{color:var(--done)}
+.stats-item .stats-label{font-size:0.72rem;color:var(--text-light);margin-top:1px}
+
+/* ── Playback ── */
+.playback-overlay{
+  position:fixed;inset:0;background:rgba(15,23,42,0.7);
+  display:flex;align-items:center;justify-content:center;z-index:1500;
+  opacity:0;pointer-events:none;transition:opacity 0.3s;
+  backdrop-filter:blur(4px);
+}
+.playback-overlay.show{opacity:1;pointer-events:auto}
+.playback-box{
+  background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow-lg);
+  padding:28px 24px 20px;width:90%;max-width:480px;height:60vh;
+  display:flex;flex-direction:column;gap:14px;
+}
+.playback-box h3{text-align:center;font-size:1.1rem}
+.playback-list{
+  flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;
+}
+.playback-item{
+  padding:14px 18px;border-radius:var(--radius-sm);
+  background:#f0fdf4;font-size:0.93rem;text-align:left;
+  border-left:3px solid var(--done);animation:fadeIn 0.3s ease;
+}
+.playback-item .pb-date{font-size:0.75rem;color:var(--text-light);margin-bottom:2px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.playback-empty{text-align:center;color:var(--text-light);padding:40px 0;font-size:0.95rem}
+.playback-btns{display:flex;gap:8px;justify-content:center}
+.playback-btns .btn{min-width:80px}
+
 /* ── Buttons ── */
 .btns{display:flex;gap:10px;justify-content:flex-end}
 .btn{
@@ -287,6 +330,7 @@ body{
       <button class="tb-btn" id="btnImport">📤 导入备份</button>
       <button class="tb-btn" id="btnSync">🔄 强制同步</button>
     </div>
+    <div class="stats-row" id="statsRow"></div>
   </div>
 
   <div class="editor empty" id="editorBox">
@@ -295,6 +339,19 @@ body{
 
   <div class="toast" id="toast">✓ 已保存</div>
   <input type="file" id="fileInput" accept=".json" style="display:none">
+
+  <!-- Playback Modal -->
+  <div class="playback-overlay" id="playbackOverlay">
+    <div class="playback-box">
+      <h3 id="playbackTitle">📽️ 本月回顾</h3>
+      <div class="playback-list" id="playbackList"></div>
+      <div class="playback-btns">
+        <button class="btn btn-ghost" id="btnPlayPrev">◀ 上一条</button>
+        <button class="btn btn-ghost" id="btnPlayNext">下一条 ▶</button>
+        <button class="btn btn-primary" id="btnPlayClose">关闭</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Import Modal -->
   <div class="modal-overlay" id="importModal">
@@ -342,6 +399,10 @@ const editorBox  = $('editorBox');
 const toastEl    = $('toast');
 const fileInput  = $('fileInput');
 const importModal = $('importModal');
+const statsRow     = $('statsRow');
+const playbackOverlay = $('playbackOverlay');
+const playbackList = $('playbackList');
+const playbackTitle = $('playbackTitle');
 
 // ═══════════════════════════════════════════
 // AUTH / CONFIG
@@ -713,7 +774,114 @@ function renderCal() {
       selectDate(this.getAttribute('data-k'));
     });
   }
+
+  renderStats();
 }
+
+// ═══════════════════════════════════════════
+// STATS
+// ═══════════════════════════════════════════
+function renderStats() {
+  var prefix = curY + '-' + String(curM + 1).padStart(2, '0') + '-';
+  var total = 0, doneCnt = 0, pendCnt = 0;
+  for (var dk in data) {
+    if (!data.hasOwnProperty(dk)) continue;
+    if (dk.indexOf(prefix) !== 0) continue;
+    var dd = getDay(dk);
+    total += dd.items.length;
+    for (var i = 0; i < dd.items.length; i++) {
+      if (dd.items[i].done) doneCnt++;
+      else pendCnt++;
+    }
+  }
+  statsRow.innerHTML =
+    '<div class="stats-item"><div class="stats-num">' + total + '</div><div class="stats-label">本月事项</div></div>' +
+    '<div class="stats-item done-stat"><div class="stats-num">' + doneCnt + '</div><div class="stats-label">✅ 已完成</div></div>' +
+    '<div class="stats-item" id="pendingStat"><div class="stats-num">' + pendCnt + '</div><div class="stats-label">⏳ 待办</div></div>' +
+    (total > 0 ? '<div class="stats-item" id="playbackBtn" style="border-color:var(--primary)"><div class="stats-num">▶</div><div class="stats-label">回顾</div></div>' : '');
+
+  // Bind playback button
+  var pbBtn = $('playbackBtn');
+  if (pbBtn) {
+    pbBtn.addEventListener('click', openPlayback);
+  }
+}
+
+// ═══════════════════════════════════════════
+// PLAYBACK
+// ═══════════════════════════════════════════
+var playbackItems = [];
+var playbackIndex = 0;
+
+function openPlayback() {
+  playbackItems = [];
+  var prefix = curY + '-' + String(curM + 1).padStart(2, '0') + '-';
+  var wds = ['周日','周一','周二','周三','周四','周五','周六'];
+  for (var dk in data) {
+    if (!data.hasOwnProperty(dk)) continue;
+    if (dk.indexOf(prefix) !== 0) continue;
+    var dd = getDay(dk);
+    for (var i = 0; i < dd.items.length; i++) {
+      if (dd.items[i].done) {
+        var parts = dk.split('-');
+        var wd = new Date(+parts[0], +parts[1] - 1, +parts[2]).getDay();
+        playbackItems.push({
+          text: dd.items[i].text,
+          date: parts[1] + '月' + parts[2] + '日 ' + wds[wd]
+        });
+      }
+    }
+  }
+  playbackTitle.textContent = '📽️ ' + curY + '年' + (curM + 1) + '月 — 已完成 ' + playbackItems.length + ' 件事';
+  playbackIndex = 0;
+  showPlaybackItem();
+  playbackOverlay.classList.add('show');
+}
+
+function showPlaybackItem() {
+  if (playbackItems.length === 0) {
+    playbackList.innerHTML = '<div class="playback-empty">🎉<br>本月还没有已完成的事项</div>';
+    return;
+  }
+  var item = playbackItems[playbackIndex];
+  playbackList.innerHTML =
+    '<div class="playback-item">' +
+      '<div class="pb-date">📆 ' + item.date + '</div>' +
+      '<div>' + esc(item.text) + '</div>' +
+    '</div>' +
+    '<div style="text-align:center;font-size:0.8rem;color:var(--text-light);margin-top:8px">' +
+      (playbackIndex + 1) + ' / ' + playbackItems.length +
+    '</div>';
+}
+
+function closePlayback() {
+  playbackOverlay.classList.remove('show');
+}
+
+$('btnPlayClose').addEventListener('click', closePlayback);
+playbackOverlay.addEventListener('click', function(e) {
+  if (e.target === playbackOverlay) closePlayback();
+});
+
+$('btnPlayPrev').addEventListener('click', function() {
+  if (playbackItems.length === 0) return;
+  playbackIndex = (playbackIndex - 1 + playbackItems.length) % playbackItems.length;
+  showPlaybackItem();
+});
+
+$('btnPlayNext').addEventListener('click', function() {
+  if (playbackItems.length === 0) return;
+  playbackIndex = (playbackIndex + 1) % playbackItems.length;
+  showPlaybackItem();
+});
+
+// Keyboard: left/right in playback mode
+document.addEventListener('keydown', function(e) {
+  if (!playbackOverlay.classList.contains('show')) return;
+  if (e.key === 'ArrowLeft')  $('btnPlayPrev').click();
+  if (e.key === 'ArrowRight') $('btnPlayNext').click();
+  if (e.key === 'Escape')     closePlayback();
+});
 
 // ═══════════════════════════════════════════
 // EDITOR
