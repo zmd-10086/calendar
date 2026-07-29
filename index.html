@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的日历</title>
+<style>
+:root {
+  --primary: #4f6ef7; --primary-light: #eef1ff; --bg: #f5f6fa; --card: #ffffff;
+  --text: #2c3e50; --text-light: #7f8c9b; --border: #e8ecf1;
+  --todo: #f59e0b; --done: #10b981; --danger: #ef4444;
+  --radius: 12px; --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.10);
+  --trans: 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;
+  display:flex;justify-content:center;align-items:flex-start;padding:24px;
+}
+
+/* ── Login ── */
+.login-overlay{
+  position:fixed;inset:0;background:rgba(15,23,42,0.6);
+  display:flex;align-items:center;justify-content:center;z-index:2000;
+  backdrop-filter:blur(4px);
+}
+.login-box{
+  background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow-lg);
+  padding:32px 28px 24px;width:90%;max-width:400px;
+}
+.login-box h2{font-size:1.3rem;text-align:center;margin-bottom:4px}
+.login-box .sub{font-size:0.85rem;color:var(--text-light);text-align:center;margin-bottom:20px;line-height:1.5}
+.login-box .field{margin-bottom:14px}
+.login-box .field label{display:block;font-size:0.82rem;font-weight:600;margin-bottom:4px;color:var(--text-light)}
+.login-box .field input{
+  width:100%;padding:10px 14px;font-size:0.93rem;border:1px solid var(--border);
+  border-radius:var(--radius-sm);font-family:inherit;transition:var(--trans);
+}
+.login-box .field input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,110,247,0.12)}
+.login-box .field .tip{font-size:0.75rem;color:var(--text-light);margin-top:3px}
+.login-box .field .tip a{color:var(--primary)}
+.login-err{color:var(--danger);font-size:0.85rem;text-align:center;margin-bottom:10px;display:none}
+.login-box .btn{width:100%;padding:11px;font-size:0.95rem;margin-bottom:8px}
+.login-box .remember-row{display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-light);justify-content:center}
+.login-box .remember-row input[type="checkbox"]{accent-color:var(--primary)}
+
+/* ── Sync Bar ── */
+.sync-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;
+  position:fixed;top:12px;right:20px;z-index:100;transition:var(--trans);
+}
+.sync-bar.synced{background:#ecfdf5;color:#059669}
+.sync-bar.saving{background:#fef3c7;color:#d97706}
+.sync-bar.error{background:#fef2f2;color:#dc2626}
+.sync-dot{width:7px;height:7px;border-radius:50%;margin-right:6px;display:inline-block}
+.sync-bar.synced .sync-dot{background:#10b981}
+.sync-bar.saving .sync-dot{background:#f59e0b;animation:pulse 0.8s infinite}
+.sync-bar.error  .sync-dot{background:#ef4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* ── App ── */
+.app{width:100%;max-width:720px;display:flex;flex-direction:column;gap:20px;margin-top:16px}
+
+/* ── Calendar ── */
+.card{
+  background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:24px 20px 20px;
+}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:6px}
+.header h2{font-size:1.25rem;font-weight:700;white-space:nowrap}
+.nav-btn{
+  width:36px;height:36px;border:1px solid var(--border);background:var(--card);
+  border-radius:var(--radius-sm);cursor:pointer;font-size:1rem;color:var(--text);
+  display:flex;align-items:center;justify-content:center;transition:var(--trans);
+}
+.nav-btn:hover{background:var(--primary-light);border-color:var(--primary);color:var(--primary)}
+.nav-btn.btn-today{width:auto;padding:0 14px;font-size:0.85rem;font-weight:600}
+
+.weekdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;margin-bottom:6px}
+.weekdays span{font-size:0.78rem;font-weight:600;color:var(--text-light);padding:4px 0}
+.weekdays .we{color:#e07070}
+
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.day{
+  aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;border-radius:var(--radius-sm);cursor:pointer;
+  font-size:0.92rem;font-weight:500;transition:var(--trans);user-select:none;
+}
+.day:hover{background:var(--primary-light)}
+.day.other{color:#cbd0d8;cursor:default}
+.day.other:hover{background:transparent}
+.day.today{background:var(--primary);color:#fff;font-weight:700}
+.day.today:hover{background:#3d5ce5}
+.day.sel{background:#dce3ff;color:var(--primary);font-weight:700;box-shadow:inset 0 0 0 2px var(--primary)}
+.day.today.sel{background:var(--primary);color:#fff;box-shadow:inset 0 0 0 2px #fff}
+
+.dots{display:flex;gap:3px;margin-top:1px}
+.dot{width:5px;height:5px;border-radius:50%}
+.dot.td{background:var(--todo)}
+.dot.dn{background:var(--done)}
+
+/* ── Toolbar ── */
+.toolbar{display:flex;gap:8px;justify-content:center;padding-top:12px;border-top:1px solid var(--border);margin-top:14px;flex-wrap:wrap}
+.tb-btn{
+  display:inline-flex;align-items:center;gap:4px;padding:6px 14px;
+  border-radius:20px;font-size:0.82rem;font-weight:600;cursor:pointer;
+  border:1px solid var(--border);background:var(--card);color:var(--text);
+  transition:var(--trans);font-family:inherit;
+}
+.tb-btn:hover{background:var(--primary-light);border-color:var(--primary);color:var(--primary)}
+
+/* ── Editor ── */
+.editor{
+  background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:24px;display:flex;flex-direction:column;gap:20px;transition:var(--trans);
+}
+.editor.empty{align-items:center;padding:48px 24px}
+.editor .hint{color:var(--text-light);font-size:0.95rem;text-align:center}
+.editor .hint .icon{font-size:2.5rem;display:block;margin-bottom:10px}
+
+.ed-title{font-size:1.1rem;font-weight:700;padding-bottom:4px;border-bottom:2px solid var(--border)}
+.ed-sec{display:flex;flex-direction:column;gap:8px}
+.ed-sec label{font-size:0.9rem;font-weight:600;display:flex;align-items:center;gap:6px}
+.ed-sec label .badge{display:inline-block;width:10px;height:10px;border-radius:50%}
+.ed-sec label .badge.bt{background:var(--todo)}
+.ed-sec label .badge.bd{background:var(--done)}
+.ed-sec textarea{
+  width:100%;min-height:120px;border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:12px 14px;font-size:0.93rem;
+  font-family:inherit;line-height:1.6;resize:vertical;transition:var(--trans);
+  background:#fafbfc;color:var(--text);
+}
+.ed-sec textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,110,247,0.12);background:#fff}
+.ed-sec textarea.ta-todo:focus{border-color:var(--todo);box-shadow:0 0 0 3px rgba(245,158,11,0.12)}
+.ed-sec textarea.ta-done:focus{border-color:var(--done);box-shadow:0 0 0 3px rgba(16,185,129,0.12)}
+.ed-sec textarea::placeholder{color:#c0c7cf}
+
+/* ── Buttons ── */
+.btns{display:flex;gap:10px;justify-content:flex-end}
+.btn{
+  padding:8px 18px;border-radius:var(--radius-sm);font-size:0.88rem;
+  font-weight:600;cursor:pointer;border:none;transition:var(--trans);font-family:inherit;
+}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:#3d5ce5}
+.btn-ghost{background:transparent;color:var(--text-light);border:1px solid var(--border)}
+.btn-ghost:hover{background:#f1f3f5;color:var(--text)}
+.btn-danger{background:transparent;color:var(--danger);border:1px solid transparent}
+.btn-danger:hover{background:#fef2f2;border-color:#fecaca}
+
+/* ── Toast ── */
+.toast{
+  position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+  background:#1e293b;color:#fff;padding:10px 24px;border-radius:20px;
+  font-size:0.85rem;font-weight:600;opacity:0;pointer-events:none;
+  transition:opacity 0.25s;z-index:999;
+}
+.toast.show{opacity:1}
+
+/* ── Modal ── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(15,23,42,0.5);
+  display:flex;align-items:center;justify-content:center;z-index:1000;
+  opacity:0;pointer-events:none;transition:opacity 0.2s;
+}
+.modal-overlay.show{opacity:1;pointer-events:auto}
+.modal{
+  background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow-lg);
+  padding:28px 24px 20px;width:90%;max-width:420px;
+}
+.modal h3{font-size:1.1rem;margin-bottom:8px}
+.modal p{font-size:0.88rem;color:var(--text-light);line-height:1.5;margin-bottom:16px}
+.modal .radio-group{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.modal .radio-group label{
+  display:flex;align-items:center;gap:8px;font-size:0.9rem;cursor:pointer;
+  padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  transition:var(--trans);
+}
+.modal .radio-group label:hover{background:#fafbfc}
+.modal .radio-group label.sel{border-color:var(--primary);background:var(--primary-light)}
+.modal .radio-group input[type="radio"]{accent-color:var(--primary);width:15px;height:15px}
+
+@media(max-width:500px){
+  body{padding:12px}
+  .card{padding:16px 10px 14px}
+  .editor{padding:18px 14px}
+  .day{font-size:0.8rem}
+  .header h2{font-size:1.05rem}
+  .nav-btn{width:32px;height:32px}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ LOGIN ═══════════ -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>🔐 我的日历</h2>
+    <p class="sub">数据存储在您的私有 GitHub 仓库中，<br>需要 GitHub Token 才能访问</p>
+    <div class="field">
+      <label>GitHub 用户名</label>
+      <input type="text" id="ghUser" placeholder="例如：zhangsan" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>数据仓库名</label>
+      <input type="text" id="ghRepo" placeholder="例如：calendar-data" autocomplete="off">
+      <div class="tip">在 GitHub 上创建一个<strong>私有</strong>仓库来存放数据</div>
+    </div>
+    <div class="field">
+      <label>Personal Access Token</label>
+      <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off">
+      <div class="tip"><a href="https://github.com/settings/tokens/new?scopes=repo&description=Calendar%20App" target="_blank">点此创建 Token</a>，勾选 <strong>repo</strong> 权限即可</div>
+    </div>
+    <div class="login-err" id="loginErr"></div>
+    <button class="btn btn-primary" id="loginBtn">进入日历</button>
+    <div class="remember-row">
+      <input type="checkbox" id="rememberInfo">
+      <label for="rememberInfo">记住用户名和仓库名（Token 不会保存）</label>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ SYNC BAR ═══════════ -->
+<div class="sync-bar synced" id="syncBar" style="display:none">
+  <span><span class="sync-dot"></span><span id="syncLabel">已同步</span></span>
+  <button class="btn btn-ghost" id="logoutBtn" style="font-size:0.75rem;padding:3px 10px;margin-left:10px;">退出</button>
+</div>
+
+<!-- ═══════════ APP ═══════════ -->
+<div class="app" id="appWrap" style="display:none">
+  <div class="card">
+    <div class="header">
+      <button class="nav-btn" id="btnPrev">◀</button>
+      <h2 id="monthTitle"></h2>
+      <button class="nav-btn" id="btnNext">▶</button>
+      <button class="nav-btn btn-today" id="btnToday">今天</button>
+    </div>
+    <div class="weekdays">
+      <span class="we">日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span class="we">六</span>
+    </div>
+    <div class="days" id="daysGrid"></div>
+    <div class="toolbar">
+      <button class="tb-btn" id="btnExport">📥 导出备份</button>
+      <button class="tb-btn" id="btnImport">📤 导入备份</button>
+      <button class="tb-btn" id="btnSync">🔄 强制同步</button>
+    </div>
+  </div>
+
+  <div class="editor empty" id="editorBox">
+    <div class="hint"><span class="icon">📅</span>点击日历中的某一天<br>来编辑当天的待办和已完成事项</div>
+  </div>
+
+  <div class="toast" id="toast">✓ 已保存</div>
+  <input type="file" id="fileInput" accept=".json" style="display:none">
+
+  <!-- Import Modal -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal">
+      <h3>📤 导入数据</h3>
+      <p id="importInfo"></p>
+      <div class="radio-group" id="importModeGroup">
+        <label class="sel"><input type="radio" name="imMode" value="merge" checked> 🔄 合并 — 保留已有数据，只添加新日期</label>
+        <label><input type="radio" name="imMode" value="replace"> ⚠️ 覆盖 — 完全替换为导入的数据</label>
+      </div>
+      <div class="btns">
+        <button class="btn btn-ghost" id="cancelImport">取消</button>
+        <button class="btn btn-primary" id="confirmImport">确认导入</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+// ═══════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════
+const DATA_FILE = 'calendar-data.json';
+const LOCAL_KEY = 'cal_backup_v3';
+
+// ═══════════════════════════════════════════
+// DOM REFS
+// ═══════════════════════════════════════════
+const $ = id => document.getElementById(id);
+
+const loginOverlay = $('loginOverlay');
+const loginErr     = $('loginErr');
+const ghUserInput  = $('ghUser');
+const ghRepoInput  = $('ghRepo');
+const ghTokenInput = $('ghToken');
+const rememberCb   = $('rememberInfo');
+
+const syncBar    = $('syncBar');
+const syncLabel  = $('syncLabel');
+const appWrap    = $('appWrap');
+const monthTitle = $('monthTitle');
+const daysGrid   = $('daysGrid');
+const editorBox  = $('editorBox');
+const toastEl    = $('toast');
+const fileInput  = $('fileInput');
+const importModal = $('importModal');
+
+// ═══════════════════════════════════════════
+// AUTH / CONFIG
+// ═══════════════════════════════════════════
+function getCfg() {
+  return {
+    user:  sessionStorage.getItem('cal_gh_user')  || '',
+    repo:  sessionStorage.getItem('cal_gh_repo')  || '',
+    token: sessionStorage.getItem('cal_gh_token') || ''
+  };
+}
+
+function setCfg(user, repo, token) {
+  sessionStorage.setItem('cal_gh_user',  user);
+  sessionStorage.setItem('cal_gh_repo',  repo);
+  sessionStorage.setItem('cal_gh_token', token);
+}
+
+function clearCfg() {
+  sessionStorage.removeItem('cal_gh_user');
+  sessionStorage.removeItem('cal_gh_repo');
+  sessionStorage.removeItem('cal_gh_token');
+}
+
+function showLogin(errMsg) {
+  loginOverlay.style.display = 'flex';
+  appWrap.style.display = 'none';
+  syncBar.style.display = 'none';
+
+  // Restore saved fields
+  var savedUser = localStorage.getItem('cal_saved_user');
+  var savedRepo = localStorage.getItem('cal_saved_repo');
+  if (savedUser) ghUserInput.value = savedUser;
+  if (savedRepo) ghRepoInput.value = savedRepo;
+  rememberCb.checked = !!(savedUser || savedRepo);
+
+  if (errMsg) {
+    loginErr.textContent = errMsg;
+    loginErr.style.display = 'block';
+  } else {
+    loginErr.style.display = 'none';
+  }
+  setTimeout(function(){ ghTokenInput.focus(); }, 100);
+}
+
+function hideLogin() {
+  loginOverlay.style.display = 'none';
+  appWrap.style.display = 'flex';
+  syncBar.style.display = 'flex';
+}
+
+async function doLogin() {
+  var user  = ghUserInput.value.trim();
+  var repo  = ghRepoInput.value.trim();
+  var token = ghTokenInput.value.trim();
+
+  if (!user) { loginErr.textContent = '请输入 GitHub 用户名'; loginErr.style.display = 'block'; return; }
+  if (!repo) { loginErr.textContent = '请输入数据仓库名'; loginErr.style.display = 'block'; return; }
+  if (!token) { loginErr.textContent = '请输入 Token'; loginErr.style.display = 'block'; return; }
+
+  // Test connection
+  setSyncBar('saving', '验证中...');
+  try {
+    var res = await fetch('https://api.github.com/repos/' + encodeURIComponent(user) + '/' + encodeURIComponent(repo), {
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Accept': 'application/vnd.github+json'
+      }
+    });
+    if (res.status === 401) {
+      loginErr.textContent = 'Token 无效或已过期';
+      loginErr.style.display = 'block';
+      setSyncBar('synced', '已同步');
+      return;
+    }
+    if (res.status === 404) {
+      loginErr.textContent = '仓库 ' + user + '/' + repo + ' 不存在，请先在 GitHub 创建';
+      loginErr.style.display = 'block';
+      setSyncBar('synced', '已同步');
+      return;
+    }
+    if (!res.ok) {
+      loginErr.textContent = '连接失败 (HTTP ' + res.status + ')，请检查网络';
+      loginErr.style.display = 'block';
+      setSyncBar('synced', '已同步');
+      return;
+    }
+  } catch(e) {
+    loginErr.textContent = '网络错误，请检查网络连接';
+    loginErr.style.display = 'block';
+    setSyncBar('synced', '已同步');
+    return;
+  }
+
+  // Save config
+  setCfg(user, repo, token);
+
+  // Remember user & repo (never token)
+  if (rememberCb.checked) {
+    localStorage.setItem('cal_saved_user', user);
+    localStorage.setItem('cal_saved_repo', repo);
+  } else {
+    localStorage.removeItem('cal_saved_user');
+    localStorage.removeItem('cal_saved_repo');
+  }
+
+  hideLogin();
+  await loadData();
+  initApp();
+}
+
+// ═══════════════════════════════════════════
+// SYNC STATUS
+// ═══════════════════════════════════════════
+function setSyncBar(status, label) {
+  syncBar.className = 'sync-bar ' + status;
+  syncLabel.textContent = label;
+}
+
+// ═══════════════════════════════════════════
+// GITHUB API
+// ═══════════════════════════════════════════
+var fileSha = null; // SHA of the data file, for update
+
+async function loadData() {
+  var cfg = getCfg();
+  if (!cfg.token) return {};
+
+  setSyncBar('saving', '加载中...');
+  try {
+    var url = 'https://api.github.com/repos/' + encodeURIComponent(cfg.user) + '/' +
+              encodeURIComponent(cfg.repo) + '/contents/' + DATA_FILE;
+    var res = await fetch(url, {
+      headers: {
+        'Authorization': 'Bearer ' + cfg.token,
+        'Accept': 'application/vnd.github+json'
+      }
+    });
+
+    if (res.status === 404) {
+      // File doesn't exist yet — will create on first save
+      fileSha = null;
+      setSyncBar('synced', '已同步');
+      return {};
+    }
+
+    if (res.status === 401) {
+      // Token invalid
+      setSyncBar('error', 'Token 无效');
+      clearCfg();
+      showLogin('Token 无效或已过期，请重新输入');
+      return {};
+    }
+
+    if (!res.ok) {
+      throw new Error('HTTP ' + res.status);
+    }
+
+    var json = await res.json();
+    fileSha = json.sha;
+    var content = json.content || '';
+    // Decode base64
+    var raw = atob(content.replace(/\s/g, ''));
+    var data = JSON.parse(raw);
+    // Save local backup
+    localStorage.setItem(LOCAL_KEY, raw);
+    setSyncBar('synced', '已同步');
+    return data;
+  } catch(e) {
+    console.error('Load failed:', e);
+    // Try local backup
+    var local = localStorage.getItem(LOCAL_KEY);
+    setSyncBar('error', '离线 — 使用本地缓存');
+    if (local) {
+      try { return JSON.parse(local); } catch {}
+    }
+    return {};
+  }
+}
+
+async function saveData(data) {
+  var cfg = getCfg();
+  if (!cfg.token) return false;
+
+  setSyncBar('saving', '保存中...');
+  try {
+    var content = JSON.stringify(data, null, 2);
+    var url = 'https://api.github.com/repos/' + encodeURIComponent(cfg.user) + '/' +
+              encodeURIComponent(cfg.repo) + '/contents/' + DATA_FILE;
+
+    var body = {
+      message: '📅 更新日历数据',
+      content: btoa(unescape(encodeURIComponent(content)))
+    };
+    if (fileSha) {
+      body.sha = fileSha;
+    }
+
+    var res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': 'Bearer ' + cfg.token,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (res.status === 409) {
+      // Conflict — another device updated the file
+      console.warn('Conflict detected, reloading and retrying...');
+      var latest = await loadData();
+      // Merge: our local changes take precedence for edited keys
+      for (var k in data) {
+        if (data.hasOwnProperty(k)) latest[k] = data[k];
+      }
+      // Save local backup
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(latest));
+      // Retry
+      return await saveData(latest);
+    }
+
+    if (res.status === 401) {
+      setSyncBar('error', 'Token 无效');
+      clearCfg();
+      showLogin('Token 无效或已过期，请重新输入');
+      return false;
+    }
+
+    if (!res.ok) {
+      throw new Error('HTTP ' + res.status);
+    }
+
+    var json = await res.json();
+    fileSha = json.content ? json.content.sha : fileSha;
+    // Save local backup
+    localStorage.setItem(LOCAL_KEY, content);
+    setSyncBar('synced', '已同步');
+    return true;
+  } catch(e) {
+    console.error('Save failed:', e);
+    // Always save local backup
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(data));
+    setSyncBar('error', '保存失败 — 已存本地');
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let data = {};
+let curY, curM, selDate = null;
+let saveTimer = null;
+
+// ═══════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════
+function key(y, m, d) {
+  return y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+}
+function getDay(dk) {
+  return data[dk] || { todo: '', done: '' };
+}
+
+function toast(msg) {
+  if (msg) toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastEl._tid);
+  toastEl._tid = setTimeout(function() {
+    toastEl.classList.remove('show');
+  }, 1800);
+}
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+// ═══════════════════════════════════════════
+// DEBOUNCED SAVE
+// ═══════════════════════════════════════════
+function debouncedSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function() {
+    saveData(data);
+  }, 600);
+}
+
+// ═══════════════════════════════════════════
+// CALENDAR RENDER
+// ═══════════════════════════════════════════
+function renderCal() {
+  monthTitle.textContent = curY + '年 ' + (curM + 1) + '月';
+
+  var fd   = new Date(curY, curM, 1).getDay();
+  var dim  = new Date(curY, curM + 1, 0).getDate();
+  var dimP = new Date(curY, curM, 0).getDate();
+
+  var now = new Date();
+  var todayKey = key(now.getFullYear(), now.getMonth(), now.getDate());
+
+  var h = '';
+
+  function cell(d, cls, dkey) {
+    var dd = getDay(dkey);
+    var dots = '';
+    var t = (dd.todo || '').trim();
+    var dn = (dd.done || '').trim();
+    if (t || dn) {
+      dots = '<div class="dots">';
+      if (t) dots += '<span class="dot td"></span>';
+      if (dn) dots += '<span class="dot dn"></span>';
+      dots += '</div>';
+    }
+    return '<div class="day' + (cls ? ' ' + cls : '') + '" data-k="' + dkey + '"><span>' + d + '</span>' + dots + '</div>';
+  }
+
+  // Prev month
+  for (var i = fd - 1; i >= 0; i--) {
+    var d = dimP - i;
+    var m = curM === 0 ? 11 : curM - 1;
+    var y = curM === 0 ? curY - 1 : curY;
+    h += cell(d, 'other', key(y, m, d));
+  }
+
+  // Current month
+  for (var d = 1; d <= dim; d++) {
+    var dk = key(curY, curM, d);
+    var cls = '';
+    if (dk === todayKey) cls += 'today';
+    if (dk === selDate) cls += (cls ? ' ' : '') + 'sel';
+    h += cell(d, cls, dk);
+  }
+
+  // Next month
+  var total = fd + dim;
+  var rem = total <= 35 ? 35 - total : 42 - total;
+  for (var d = 1; d <= rem; d++) {
+    var m = curM === 11 ? 0 : curM + 1;
+    var y = curM === 11 ? curY + 1 : curY;
+    h += cell(d, 'other', key(y, m, d));
+  }
+
+  daysGrid.innerHTML = h;
+
+  var cells = daysGrid.querySelectorAll('.day:not(.other)');
+  for (var ci = 0; ci < cells.length; ci++) {
+    cells[ci].addEventListener('click', function() {
+      selectDate(this.getAttribute('data-k'));
+    });
+  }
+}
+
+// ═══════════════════════════════════════════
+// EDITOR
+// ═══════════════════════════════════════════
+function selectDate(dk) {
+  selDate = dk;
+  renderCal();
+  showEditor(dk);
+}
+
+function showEditor(dk) {
+  if (!dk) {
+    editorBox.className = 'editor empty';
+    editorBox.innerHTML = '<div class="hint"><span class="icon">📅</span>点击日历中的某一天<br>来编辑当天的待办和已完成事项</div>';
+    return;
+  }
+
+  var parts = dk.split('-');
+  var y = +parts[0], m = +parts[1], d = +parts[2];
+  var dd = getDay(dk);
+  var wds = ['周日','周一','周二','周三','周四','周五','周六'];
+  var wd = new Date(y, m - 1, d).getDay();
+
+  editorBox.className = 'editor';
+  editorBox.innerHTML =
+    '<div class="ed-title">📆 ' + y + '年' + m + '月' + d + '日 ' + wds[wd] + '</div>' +
+    '<div class="ed-sec">' +
+      '<label><span class="badge bt"></span> 待办事项</label>' +
+      '<textarea class="ta-todo" id="taTodo" placeholder="写下今天要做的事情…">' + esc(dd.todo) + '</textarea>' +
+    '</div>' +
+    '<div class="ed-sec">' +
+      '<label><span class="badge bd"></span> 已完成事项</label>' +
+      '<textarea class="ta-done" id="taDone" placeholder="写下已经完成的事情…">' + esc(dd.done) + '</textarea>' +
+    '</div>' +
+    '<div class="btns">' +
+      '<button class="btn btn-danger" id="btnClear">清空当天</button>' +
+    '</div>';
+
+  var taTodo = $('taTodo');
+  var taDone = $('taDone');
+
+  function autoSave() {
+    if (!data[selDate]) data[selDate] = { todo: '', done: '' };
+    data[selDate].todo = taTodo.value;
+    data[selDate].done = taDone.value;
+    renderCal();
+    debouncedSave();
+  }
+
+  taTodo.addEventListener('input', autoSave);
+  taDone.addEventListener('input', autoSave);
+
+  $('btnClear').addEventListener('click', function() {
+    if (confirm('确定要清空 ' + y + '年' + m + '月' + d + '日 的所有内容吗？')) {
+      delete data[selDate];
+      taTodo.value = '';
+      taDone.value = '';
+      renderCal();
+      debouncedSave();
+      toast('✓ 已清空');
+    }
+  });
+
+  setTimeout(function() { taTodo.focus(); }, 60);
+}
+
+// ═══════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════
+function gotoMonth(y, m) { curY = y; curM = m; renderCal(); }
+
+$('btnPrev').addEventListener('click', function() {
+  if (curM === 0) gotoMonth(curY - 1, 11);
+  else gotoMonth(curY, curM - 1);
+});
+
+$('btnNext').addEventListener('click', function() {
+  if (curM === 11) gotoMonth(curY + 1, 0);
+  else gotoMonth(curY, curM + 1);
+});
+
+$('btnToday').addEventListener('click', function() {
+  var n = new Date();
+  gotoMonth(n.getFullYear(), n.getMonth());
+  selectDate(key(n.getFullYear(), n.getMonth(), n.getDate()));
+});
+
+// ═══════════════════════════════════════════
+// IMPORT / EXPORT
+// ═══════════════════════════════════════════
+let pendingImport = null;
+
+$('btnExport').addEventListener('click', function() {
+  var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  var n = new Date();
+  a.download = '日历备份_' + n.getFullYear() + '-' + String(n.getMonth()+1).padStart(2,'0') + '-' + String(n.getDate()).padStart(2,'0') + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('✓ 数据已导出');
+});
+
+$('btnImport').addEventListener('click', function() {
+  fileInput.value = '';
+  fileInput.click();
+});
+
+fileInput.addEventListener('change', function(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      var parsed = JSON.parse(ev.target.result);
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+        throw new Error('根节点必须是 JSON 对象');
+      for (var dk in parsed) {
+        if (!parsed.hasOwnProperty(dk)) continue;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) throw new Error('无效日期键: ' + dk);
+        var v = parsed[dk];
+        if (!v || typeof v !== 'object' || Array.isArray(v))
+          throw new Error(dk + ' 数据格式不正确');
+      }
+      pendingImport = parsed;
+      $('importInfo').textContent = '文件包含 ' + Object.keys(parsed).length + ' 天的记录。';
+      document.querySelector('#importModeGroup input[value="merge"]').checked = true;
+      // Reset radio styles
+      var labels = document.querySelectorAll('#importModeGroup label');
+      for (var li = 0; li < labels.length; li++) labels[li].classList.remove('sel');
+      labels[0].classList.add('sel');
+      importModal.classList.add('show');
+    } catch(err) {
+      alert('文件格式不正确：\n\n' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+// Radio button styling
+var radioInputs = document.querySelectorAll('#importModeGroup input[name="imMode"]');
+for (var ri = 0; ri < radioInputs.length; ri++) {
+  radioInputs[ri].addEventListener('change', function() {
+    var labels = document.querySelectorAll('#importModeGroup label');
+    for (var lj = 0; lj < labels.length; lj++) labels[lj].classList.remove('sel');
+    this.closest('label').classList.add('sel');
+  });
+}
+
+$('cancelImport').addEventListener('click', function() {
+  importModal.classList.remove('show');
+  pendingImport = null;
+});
+
+$('confirmImport').addEventListener('click', async function() {
+  if (!pendingImport) return;
+  var mode = document.querySelector('input[name="imMode"]:checked').value;
+  if (mode === 'replace') {
+    data = pendingImport;
+  } else {
+    for (var k in pendingImport) {
+      if (pendingImport.hasOwnProperty(k) && !data.hasOwnProperty(k)) {
+        data[k] = pendingImport[k];
+      }
+    }
+  }
+  importModal.classList.remove('show');
+  pendingImport = null;
+  renderCal();
+  if (selDate) showEditor(selDate);
+  await saveData(data);
+  toast('✓ 已导入并同步');
+});
+
+importModal.addEventListener('click', function(e) {
+  if (e.target === importModal) {
+    importModal.classList.remove('show');
+    pendingImport = null;
+  }
+});
+
+// ═══════════════════════════════════════════
+// FORCE SYNC
+// ═══════════════════════════════════════════
+$('btnSync').addEventListener('click', async function() {
+  // First save local changes, then reload
+  await saveData(data);
+  var fresh = await loadData();
+  if (Object.keys(fresh).length > 0) {
+    // Merge: cloud data wins for keys we haven't touched
+    for (var k in fresh) {
+      if (fresh.hasOwnProperty(k) && !data.hasOwnProperty(k)) {
+        data[k] = fresh[k];
+      }
+    }
+  }
+  renderCal();
+  if (selDate) showEditor(selDate);
+  setSyncBar('synced', '已同步');
+  toast('✓ 同步完成');
+});
+
+// ═══════════════════════════════════════════
+// LOGOUT
+// ═══════════════════════════════════════════
+$('logoutBtn').addEventListener('click', function() {
+  clearCfg();
+  data = {};
+  fileSha = null;
+  showLogin();
+});
+
+// ═══════════════════════════════════════════
+// KEYBOARD
+// ═══════════════════════════════════════════
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowLeft')  $('btnPrev').click();
+  if (e.key === 'ArrowRight') $('btnNext').click();
+  if (e.key === 't' || e.key === 'T') $('btnToday').click();
+});
+
+// ═══════════════════════════════════════════
+// LOGIN EVENTS
+// ═══════════════════════════════════════════
+$('loginBtn').addEventListener('click', doLogin);
+ghTokenInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
+});
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+function initApp() {
+  var now = new Date();
+  curY = now.getFullYear();
+  curM = now.getMonth();
+  renderCal();
+  selectDate(key(curY, curM, now.getDate()));
+}
+
+// Startup
+var cfg = getCfg();
+if (cfg.token) {
+  // Try to resume session
+  hideLogin();
+  // Restore saved fields in background
+  var savedUser = localStorage.getItem('cal_saved_user');
+  var savedRepo = localStorage.getItem('cal_saved_repo');
+  if (savedUser) ghUserInput.value = savedUser;
+  if (savedRepo) ghRepoInput.value = savedRepo;
+  if (savedUser || savedRepo) rememberCb.checked = true;
+
+  loadData().then(function(d) {
+    data = d;
+    initApp();
+  });
+} else {
+  showLogin();
+}
+})();
+</script>
+</body>
+</html>
