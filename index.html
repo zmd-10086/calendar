@@ -177,6 +177,20 @@ body{
 .task-add-row input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,110,247,0.12);background:#fff}
 .task-add-row .btn{white-space:nowrap}
 
+/* ── Time Period ── */
+.task-time-badge{
+  font-size:0.72rem;padding:2px 8px;border-radius:10px;font-weight:600;white-space:nowrap;flex-shrink:0;
+}
+.task-time-badge.badge-morning{background:#fef3c7;color:#b45309}
+.task-time-badge.badge-afternoon{background:#dbeafe;color:#1d4ed8}
+.task-time-badge.badge-evening{background:#ede9fe;color:#6d28d9}
+.time-select{
+  padding:8px 10px;font-size:0.85rem;border:1px solid var(--border);
+  border-radius:var(--radius-sm);font-family:inherit;background:#fafbfc;
+  color:var(--text);cursor:pointer;transition:var(--trans);max-width:90px;
+}
+.time-select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,110,247,0.12);background:#fff}
+
 /* ── Stats Row ── */
 .stats-row{
   display:flex;gap:10px;justify-content:center;padding-top:10px;
@@ -930,6 +944,12 @@ function showEditor(dk) {
     '</div>' +
     '<div class="task-add-row">' +
       '<input type="text" id="taskInput" placeholder="添加新事项…">' +
+      '<select class="time-select" id="timeSelect">' +
+        '<option value="">全天</option>' +
+        '<option value="morning">🌅 早上</option>' +
+        '<option value="afternoon">☀️ 下午</option>' +
+        '<option value="evening">🌙 晚上</option>' +
+      '</select>' +
       '<button class="btn btn-primary" id="btnAdd">添加</button>' +
     '</div>' +
     '<div class="btns">' +
@@ -937,6 +957,11 @@ function showEditor(dk) {
     '</div>';
 
   // ── Render items ──
+  function timeBadgeHTML(timeOfDay) {
+    if (!timeOfDay) return '';
+    var labels = { morning: '🌅 早上', afternoon: '☀️ 下午', evening: '🌙 晚上' };
+    return '<span class="task-time-badge badge-' + timeOfDay + '">' + (labels[timeOfDay] || '') + '</span>';
+  }
   function renderItems() {
     var dd = getDay(selDate);
     var pendingHTML = '';
@@ -945,6 +970,7 @@ function showEditor(dk) {
       var item = dd.items[i];
       var row =
         '<div class="task-item' + (item.done ? ' done' : '') + '" data-idx="' + i + '">' +
+          timeBadgeHTML(item.timeOfDay) +
           '<span class="task-text">' + esc(item.text) + '</span>' +
           (item.done
             ? '<span class="task-badge badge-done">已完成</span>' +
@@ -967,17 +993,26 @@ function showEditor(dk) {
         var idx = parseInt(this.getAttribute('data-idx'));
         var itemEl = document.querySelector('.task-item[data-idx="' + idx + '"]');
         var oldText = dd.items[idx].text;
+        var oldTime = dd.items[idx].timeOfDay || '';
         itemEl.innerHTML =
           '<input class="task-edit-input" value="' + esc(oldText) + '">' +
+          '<select class="time-select time-edit-select">' +
+            '<option value="">全天</option>' +
+            '<option value="morning"' + (oldTime === 'morning' ? ' selected' : '') + '>🌅 早上</option>' +
+            '<option value="afternoon"' + (oldTime === 'afternoon' ? ' selected' : '') + '>☀️ 下午</option>' +
+            '<option value="evening"' + (oldTime === 'evening' ? ' selected' : '') + '>🌙 晚上</option>' +
+          '</select>' +
           '<button class="task-btn" style="color:var(--done);">✓</button>' +
           '<button class="task-btn" style="color:#9ca3af;">✕</button>';
         var input = itemEl.querySelector('input');
+        var timeSel = itemEl.querySelector('select');
         var buttons = itemEl.querySelectorAll('button');
         input.focus();
         input.select();
         function saveEdit() {
           var newText = input.value.trim();
           if (newText) dd.items[idx].text = newText;
+          dd.items[idx].timeOfDay = timeSel ? timeSel.value : '';
           persistAndReRender();
         }
         buttons[0].addEventListener('click', saveEdit);   // ✓ 保存
@@ -1018,8 +1053,11 @@ function showEditor(dk) {
     var text = input.value.trim();
     if (!text) return;
     if (!data[selDate]) data[selDate] = { items: [] };
-    data[selDate].items.unshift({ text: text, done: false });
+    var timeSelect = $('timeSelect');
+    var timeOfDay = timeSelect ? timeSelect.value : '';
+    data[selDate].items.unshift({ text: text, done: false, timeOfDay: timeOfDay });
     input.value = '';
+    if (timeSelect) timeSelect.value = '';
     persistAndReRender();
   }
   $('btnAdd').addEventListener('click', addItem);
